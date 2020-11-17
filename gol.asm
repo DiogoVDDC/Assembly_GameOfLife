@@ -57,23 +57,21 @@ clear_leds:
 ;BEGIN:set_pixel
 set_pixel:
 	; Find in which array to change the led
-	srli t1, a0, 2
-	slli t1, t1, 4		; maps led array index to either 0, 4 or 8 (since addresses have spacing of 4)
-	; Get index of the bit to set to 1
-	addi t2, zero, 3	
-	and t3, t1, t2 		;x % 4
-	slli t3, t3, 3		;maps t3 to either 0, 8, 16 or 24 (collumn index in fig9)
-	add t3, t3, a1		;add y to get index of bit to set to 1
-	addi t4, zero, 1	;set t4 to 1 
-	sll t4, t4, t3		;shift t4 to have a one at the led index
+	srli t1, a0, 2 		; index of word in of LED (0, 1, 2)
+	slli t1, t1, 2		; multiply by 4 to get the correct LED word address (0, 4, 8)
+
+	addi t2, zero, 3	; mask for mod 4
+	and t3, a0, t2 		; x mod 4
+	slli t3, t3, 3 		; multiply t3 by 8 
+	add t3, t3, a1 		; add y to t3 to get index of bit to be set to 1;
+	addi t4, zero, 1	; set t4 to 1 
+	sll t4, t4, t3		; shift t4 to have a one at the led index	
+
 	; Set new state of the leds  
-	ldw t5, LEDS(t3)	; get current state of the leds array
+	ldw t5, LEDS(t1)	; get current state of the leds array
 	or t5, t4, t5		; turn on the given led 
-	stw t5, LEDS(t3)	; store the new state
-	
-	addi t2, zero, 2
-	stw t2, SPEED(zero)
-	ret 
+	stw t5, LEDS(t1)	; store the new state
+	ret
 ; END:set_pixel
 
 ; BEGIN:wait
@@ -129,8 +127,8 @@ POP:
 
 decrement_timer_loop:
 	sub t0, t0, t2
-	bgt t0, zero, decrement_timer_loop
-	ret	s1
+	bge t0, zero, decrement_timer_loop
+	ret
 
 fetchGSA0:
 	ldw t0, GSA0(a0)
@@ -139,16 +137,18 @@ fetchGSA0:
 fetchGSA1:
 	ldw t0, GSA1(a0)
 	add v0, zero, t0
-	ret s1
+	ret
 
 setGSA0:
 	stw a0, GSA0(a1)
-	ret s1
+	ret
 setGSA1:
 	stw a0, GSA1(a1)
-	ret s1
+	ret
 
 draw_loop:
+	;t0 leds0 , t1, leds1, t2 leds 2
+
 	add t5, t4, a0		;get index in leds of the bit
 
 	andi t3, v0, 1		;isolate last bit of v0 // isolated bit is already in LSB
@@ -167,10 +167,10 @@ draw_loop:
 	
 	srli v0, v0, 1		;shift v0 one bit to the right
 	addi t4, t4, 8		;add 8 to the column index 
-	cmpgtui t6, t4, 24	;set to 1 if column index is bigger than 24
+	cmpgeui t6, t4, 24	;set to 1 if column index is bigger than 24
 	add a0, a0, t6		;if loop finished placing all bit of current line then t6=1 which will increment the line
 
-	cmpgtui t7, a0, 7 	;set if line index is bigger than 7 (out of bounds)
+	cmpgeui t7, a0, 7 	;set if line index is bigger than 7 (out of bounds)
 	bne t7, zero, end_draw_loop ;check if last line has been reached in which case calls the end of the loop
 	br draw_loop		;else go to next iteration
 
@@ -178,7 +178,7 @@ end_draw_loop:
 	stw t0, LEDS(zero)	;Set leds 0
 	stw t1, LEDS+4(zero);Set leds 1
 	stw t2, LEDS+8(zero);Set leds 2
-	ret	s1				; return to call
+	ret				; return to call
 
 ; END:helper
 font_data:
