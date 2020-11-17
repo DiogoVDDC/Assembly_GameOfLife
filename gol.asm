@@ -40,12 +40,10 @@ main:
 	;stw t1, GSA0+20(zero)
 	;stw t0, GSA0+24(zero)
 	;stw t1, GSA0+28(zero)
-	addi sp, zero, 24
+	;addi sp, zero, 24
 	addi a0, zero, 4
 	addi a1, zero, 5
-	call PUSH
-	jmpi set_pixel
-	call POP
+	call set_pixel
 	;;TODO
 
 ; BEGIN:clear_leds
@@ -59,14 +57,12 @@ clear_leds:
 ;BEGIN:set_pixel
 set_pixel:
 	; Find in which array to change the led
-	cmpgtui t0, a0, 3
-	cmpgtui t1, a0, 7
-	add t1, t0, t1		; led array index (0,1 or 2)
+	srli t1, a0, 2
 	slli t1, t1, 4		; maps led array index to either 0, 4 or 8 (since addresses have spacing of 4)
 	; Get index of the bit to set to 1
 	addi t2, zero, 3	
 	and t3, t1, t2 		;x % 4
-	slli t3, t3, 8		;maps t3 to either 0, 8, 16 or 24 (collumn index in fig9)
+	slli t3, t3, 3		;maps t3 to either 0, 8, 16 or 24 (collumn index in fig9)
 	add t3, t3, a1		;add y to get index of bit to set to 1
 	addi t4, zero, 1	;set t4 to 1 
 	sll t4, t4, t3		;shift t4 to have a one at the led index
@@ -77,9 +73,6 @@ set_pixel:
 	
 	addi t2, zero, 2
 	stw t2, SPEED(zero)
-	call PUSH
-	jmpi wait
-	call POP
 	ret 
 ; END:set_pixel
 
