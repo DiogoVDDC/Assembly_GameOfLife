@@ -29,21 +29,26 @@
     .equ RUNNING, 0x01
 
 main:
-	;stw zero, GSA_ID(zero)
-	;addi t0, zero, 2730
-	;addi t1, zero, 1365
-	;stw t0, GSA0(zero)
-	;stw t1, GSA0+4(zero)
-	;stw t0, GSA0+8(zero)
-	;stw t1, GSA0+12(zero)
-	;stw t0, GSA0+16(zero)
-	;stw t1, GSA0+20(zero)
-	;stw t0, GSA0+24(zero)
-	;stw t1, GSA0+28(zero)
-	;addi sp, zero, 24
-	addi a0, zero, 4
-	addi a1, zero, 5
-	call set_pixel
+	stw zero, GSA_ID(zero)
+
+	addi t0, zero, 2730
+	addi t1, zero, 1365
+	stw t0, GSA0(zero)
+	stw t1, GSA0+4(zero)
+	stw t0, GSA0+8(zero)
+	stw t1, GSA0+12(zero)
+	stw t0, GSA0+16(zero)
+	stw t1, GSA0+20(zero)
+	stw t0, GSA0+24(zero)
+	stw t1, GSA0+28(zero)
+;	addi a0, zero, 5
+;	addi a1, zero, 4	
+
+	addi sp, zero, 8192
+
+	call draw_gsa
+	addi v0, zero, 10
+	break
 	;;TODO
 
 ; BEGIN:clear_leds
@@ -60,8 +65,7 @@ set_pixel:
 	srli t1, a0, 2 		; index of word in of LED (0, 1, 2)
 	slli t1, t1, 2		; multiply by 4 to get the correct LED word address (0, 4, 8)
 
-	addi t2, zero, 3	; mask for mod 4
-	and t3, a0, t2 		; x mod 4
+	andi t3, a0, 3 		; x mod 4
 	slli t3, t3, 3 		; multiply t3 by 8 
 	add t3, t3, a1 		; add y to t3 to get index of bit to be set to 1;
 	addi t4, zero, 1	; set t4 to 1 
@@ -79,106 +83,98 @@ wait:
 	addi t0, zero, 1
 	slli t0, t0, 3 ;19
 	ldw t2, SPEED(zero)
-	call PUSH
-	jmpi decrement_timer_loop
-	call POP
-	ret 
+	br decrement_timer_loop
 ; END:wait
 
 ; BEGIN:get_gsa
 get_gsa:
-	addi t0, zero, GSA_ID	; set t0 to the GSAID
-	beq t0, zero, fetchGSA0 ; if gsa ID is 0 then fetch in gsa0 else fetch in gsa1
-	call fetchGSA1
-	ret 
+	ldw t0, GSA_ID(zero)
+	slli t0, t0, 5
+	slli t1, a0, 2
+	add t0, t0, t1
+	ldw v0, GSA0(t0)
+	ret
 ; END:get_gsa
 
 ; BEGIN:set_gsa
 set_gsa:
-	addi t0, zero, GSA_ID	; set t0 to the GSAID
-	beq t0, zero, setGSA0	; if gsa ID is 0 then set in gsa0 else in gsa1
-	call setGSA1
-	ret 
+	ldw t0, GSA_ID(zero)	; set t0 to the GSAID
+	slli t0, t0, 5
+	add t0, t0, a0
+	stw a1, GSA0(t0) 
+	ret
 ; END:set_gsa
 
 ; BEGIN:draw_gsa
 draw_gsa:
-	add a0, zero, zero
-	add t0, zero, zero
-	add t1, zero, zero
-	add t2, zero, zero
-	add t4, zero, zero
-	call PUSH
-	call get_gsa
-	call draw_loop
-	ret 
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
+	
+	add a0, zero, zero	; line index (0,1,2,3,4,5,6 or 7)
+	add s0, zero, zero	; LEDS0
+	add s1, zero, zero	; LEDS1
+	add s2, zero, zero	; LEDS2
+	add s4, zero, zero 	; x index in the leds (0, 8, 16 or 24)
+	call draw_gsa_iterator
+	stw s0, LEDS(zero)	;Set leds 0
+	stw s1, LEDS+4(zero);Set leds 1
+	stw s2, LEDS+8(zero);Set leds 2
+	
+	;POP
+	addi sp, sp, 4
+	ldw ra, 0(sp)
+	ret
 ; END:draw_gsa
 
 
 ; BEGIN:helper
-PUSH:
-	addi sp, sp, -4
-	stw ra, 0(sp)
-	ret
-POP:
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
-
 decrement_timer_loop:
 	sub t0, t0, t2
-	bge t0, zero, decrement_timer_loop
+	bgtu t0, t2, decrement_timer_loop
 	ret
 
-fetchGSA0:
-	ldw t0, GSA0(a0)
-	add v0, zero, t0
-	ret
-fetchGSA1:
-	ldw t0, GSA1(a0)
-	add v0, zero, t0
-	ret
+draw_gsa_iterator:
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
 
-setGSA0:
-	stw a0, GSA0(a1)
-	ret
-setGSA1:
-	stw a0, GSA1(a1)
-	ret
+	addi t7, zero, 7		;8 in t7
+	call get_gsa
+	add s4, zero, zero
 
-draw_loop:
-	;t0 leds0 , t1, leds1, t2 leds 2
+	ldw ra, 0(sp)
 
-	add t5, t4, a0		;get index in leds of the bit
+	ble a0, t7, draw_line_loop
+	ret
+	
+
+draw_line_loop:
+	;s0=LEDS0 , s1=LEDS1, s2=LEDS2
+	add t5, s4, a0		;get shift index in the leds array
 
 	andi t3, v0, 1		;isolate last bit of v0 // isolated bit is already in LSB
 	sll t3, t3, t5		;shift to get bit in the rigt column and row
-	or t0, t0, t3		; Put in leds 0											t4
-;																				0 1 2 3 4 5 6 7 8 9 1011			LEDS 0		LEDS 1		LEDS 2
+	or s0, s0, t3		;Put in leds 0											t4
+;																				11109 8 7 6 5 4 3 2 1 0			LEDS 0		LEDS 1		LEDS 2
 	andi t3, v0, 16		;isolate bit at index 4 of v0					   a0 0 | | | | | | | | | | | |			0 8  16 24 | 0 8  16 24 | 0 8  16 24 
-	slli t3, t3, 4		;isolated bit in LSB								  1	| | | | | | | | | | | | 		1 9  17 25 | 1 9  17 25 | 1 9  17 25 
+	srli t3, t3, 4		;isolated bit in LSB								  1	| | | | | | | | | | | | 		1 9  17 25 | 1 9  17 25 | 1 9  17 25 
 	sll t3, t3, t5		;shift to get bit in the rigt column and row		  2	| | | | | | | | | | | | 		2 10 18 26 | 2 10 18 26 | 2 10 18 26 
-	or t1, t1, t3		;Put in leds 1										  3	| | | | | | | | | | | | 		3 11 19 27 | 3 11 19 27 | 3 11 19 27 
+	or s1, s1, t3		;Put in leds 1										  3	| | | | | | | | | | | | 		3 11 19 27 | 3 11 19 27 | 3 11 19 27 
 ;																			  4	| | | | | | | | | | | | 		4 12 20 28 | 4 12 20 28 | 4 12 20 28 
 	andi t3, v0, 256	;isolate bit at index 8 of v0						  5	| | | | | | | | | | | | 		5 13 21 29 | 5 13 21 29 | 5 13 21 29 
-	slli t3, t3, 8		;isolated bit in LSB								  6	| | | | | | | | | | | | 		6 14 22 30 | 6 14 22 30 | 6 14 22 30 
+	srli t3, t3, 8		;isolated bit in LSB								  6	| | | | | | | | | | | | 		6 14 22 30 | 6 14 22 30 | 6 14 22 30 
 	sll t3, t3, t5		;shift to get bit in the rigt column and row		  7	| | | | | | | | | | | | 		7 15 23 31 | 7 15 23 31 | 7 15 23 31 
-	or t2, t2, t3		;Put in leds 2
+	or s2, s2, t3		;Put in leds 2
+	
+	cmpeqi t6, s4, 24	;if t4==24 then t6 = 6 hence changing the line 
+	add a0, a0, t6		;increment line index if reached column 4 
+	bne t6, zero, draw_gsa_iterator
 	
 	srli v0, v0, 1		;shift v0 one bit to the right
-	addi t4, t4, 8		;add 8 to the column index 
-	cmpgeui t6, t4, 24	;set to 1 if column index is bigger than 24
-	add a0, a0, t6		;if loop finished placing all bit of current line then t6=1 which will increment the line
+	addi s4, s4, 8		;add 8 to the column index 
+	br draw_line_loop	;else go to next iteration
 
-	cmpgeui t7, a0, 7 	;set if line index is bigger than 7 (out of bounds)
-	bne t7, zero, end_draw_loop ;check if last line has been reached in which case calls the end of the loop
-	br draw_loop		;else go to next iteration
-
-end_draw_loop:
-	stw t0, LEDS(zero)	;Set leds 0
-	stw t1, LEDS+4(zero);Set leds 1
-	stw t2, LEDS+8(zero);Set leds 2
-	ret				; return to call
 
 ; END:helper
 font_data:
