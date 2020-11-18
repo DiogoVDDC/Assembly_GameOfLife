@@ -29,25 +29,14 @@
     .equ RUNNING, 0x01
 
 main:
-	stw zero, GSA_ID(zero)
+	; Initialization of value // DONT DELETE OR WONT WORK
+	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
+	addi sp, zero, 8192		;Init stack pointer to end of memory
 
-	addi t0, zero, 2730
-	addi t1, zero, 1365
-	stw t0, GSA0(zero)
-	stw t1, GSA0+4(zero)
-	stw t0, GSA0+8(zero)
-	stw t1, GSA0+12(zero)
-	stw t0, GSA0+16(zero)
-	stw t1, GSA0+20(zero)
-	stw t0, GSA0+24(zero)
-	stw t1, GSA0+28(zero)
-;	addi a0, zero, 5
-;	addi a1, zero, 4	
-
-	addi sp, zero, 8192
-
-	call draw_gsa
-	addi v0, zero, 10
+	;Testing:
+	addi t0, zero, 3
+	stw t0, RANDOM_NUM(zero)	
+	call random_gsa
 	break
 	;;TODO
 
@@ -122,11 +111,28 @@ draw_gsa:
 	stw s2, LEDS+8(zero);Set leds 2
 	
 	;POP
-	addi sp, sp, 4
 	ldw ra, 0(sp)
+	addi sp, sp, 4
 	ret
 ; END:draw_gsa
 
+; BEGIN: random_gsa
+random_gsa:
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	addi s0, zero, 11	;Max value of x coordinate (used for comparisons later)
+	addi s1, zero, 7	;Max value of y coordinate (used for comparions later)
+	addi a0, zero, -1
+	addi a1, zero, -1
+	call randomize_gsa
+
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
+; END: random_gsa
 
 ; BEGIN:helper
 decrement_timer_loop:
@@ -142,13 +148,14 @@ draw_gsa_iterator:
 	addi t7, zero, 7		;8 in t7
 	call get_gsa
 	add s4, zero, zero
-
+	
+	; POP
 	ldw ra, 0(sp)
+	addi sp, sp, 4
 
 	ble a0, t7, draw_line_loop
 	ret
 	
-
 draw_line_loop:
 	;s0=LEDS0 , s1=LEDS1, s2=LEDS2
 	add t5, s4, a0		;get shift index in the leds array
@@ -175,8 +182,40 @@ draw_line_loop:
 	addi s4, s4, 8		;add 8 to the column index 
 	br draw_line_loop	;else go to next iteration
 
+randomize_gsa:
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
 
+
+	cmpeq t6, a0, s0	; Check if x coor equals max x coord
+	cmpeq t7, a1, s1	; Check if y coor equals max y coord
+	and t6, t6, t7		; and the both to know wether both are true
+
+	addi a1, a1, 1	;increment x coord
+	andi a1, a1, 7	;x coord mod 8 (to make it loop from 0 to 7)
+	cmpeqi t1, a1, 0
+	add a0, a0, t1	;increment y coord if x coord == 0
+
+	bne t6, zero, end_randomize_gsa ;end loop if both x and y reached max value
+
+	ldw t0, RANDOM_NUM(zero)	; Get the random value
+	andi t0, t0, 1				; random value % 2
+	
+	beq t0, zero, randomize_gsa	;If the value of t0 is 0 then we don't set the pixel 
+	call set_pixel				;else set the given pixel to 1
+
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	br randomize_gsa
+
+end_randomize_gsa:
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 ; END:helper
+
 font_data:
     .word 0xFC # 0
     .word 0x60 # 1
