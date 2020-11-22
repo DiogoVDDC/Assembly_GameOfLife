@@ -33,11 +33,48 @@ main:
 	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
 	addi sp, zero, 8192		;Init stack pointer to end of memory
 
-	;Testing:
-	addi t0, zero, 3
-	stw t0, RANDOM_NUM(zero)	
-	call random_gsa
+	; Initialise default speed value to 1
+	ldw t0, SPEED(zero) 	
+	addi t0, t0, 1
+	stw t0, SPEED(zero)
+
+	;Initialise number of steps to default value 1 and corresponding Seven Segment Display
+	ldw t0, CURR_STEP(zero)
+	addi t0, t0, 1
+	stw t0, CURR_STEP(zero)
+	ldw t0, SEVEN_SEGS(zero)
+	addi t0, t0, 1
+	stw t0, SEVEN_SEGS(zero)
+
+	;Testing random_gsa:
+	;addi t0, zero, 3
+	;stw t0, RANDOM_NUM(zero)	
+	;call random_gsa
+	;break
+
+	;Testing change_speed:
+	;addi a0, a0, 0
+	;call change_speed
+	;addi a0, a0, 1
+	;call change_speed
+	;break
+
+	;Testing pause_game:
+	;call pause_game 
+	;call pause_game 
+	;break
+
+	;Testing change steps:
+	;addi a0, a0, 0
+	;addi a1, a1, 1
+	;addi a2, a2, 1
+	;call change_steps
+	;break
+
+	;Testing increment_seed:
+	call increment_seed
 	break
+
 	;;TODO
 
 ; BEGIN:clear_leds
@@ -48,7 +85,7 @@ clear_leds:
 	ret 
 ; END:clear_leds
 
-;BEGIN:set_pixel
+; BEGIN:set_pixel
 set_pixel:
 	; Find in which array to change the led
 	srli t1, a0, 2 		; index of word in of LED (0, 1, 2)
@@ -116,7 +153,7 @@ draw_gsa:
 	ret
 ; END:draw_gsa
 
-; BEGIN: random_gsa
+; BEGIN:random_gsa
 random_gsa:
 	;PUSH
 	addi sp, sp, -4
@@ -132,12 +169,12 @@ random_gsa:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
-; END: random_gsa
+; END:random_gsa
 
 ; BEGIN:helper
 decrement_timer_loop:
 	sub t0, t0, t2
-	bgtu t0, t2, decrement_timer_loop
+	bgeu t0, t2, decrement_timer_loop
 	ret
 
 draw_gsa_iterator:
@@ -153,7 +190,7 @@ draw_gsa_iterator:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 
-	ble a0, t7, draw_line_loop
+	blt a0, t7, draw_line_loop
 	ret
 	
 draw_line_loop:
@@ -214,6 +251,116 @@ end_randomize_gsa:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
+; END:helper
+
+; BEGIN:change_speed
+change_speed: 
+	; a0 is 1 if speed is to be incremented, 0 if speed to be decremented
+	add s0, zero, zero
+	add t0, zero, zero
+	add t1, zero, zero
+
+	addi t0, zero, 1
+	beq a0, t0, ldw_speed_decrement
+	beq a0, zero, ldw_speed_increment
+
+; END:set_pixel
+
+; BEGIN:helper
+ldw_speed_increment:
+	addi t1, zero, 10
+	ldw s0, SPEED(zero)
+	blt s0, t1, speed_increment 
+	ret
+; END:helper 
+
+; BEGIN:helper
+ldw_speed_decrement:
+	addi t1, zero, 2
+	ldw s0, SPEED(zero)
+	bge s0, t1, speed_decrement 
+	ret
+; END:helper 
+
+; BEGIN:helper
+speed_increment:
+	addi s0, s0, 1
+	stw s0, SPEED(zero)
+	ret
+; END:helper
+
+; BEGIN:helper
+speed_decrement:
+	addi s0, s0, -1
+	stw s0, SPEED(zero)
+	ret
+; END:helper 
+
+; BEGIN:pause_game
+pause_game:
+	add t0, zero, zero
+	addi t0, t0, 1
+	ldw t1, PAUSE(zero)
+	xori t1, t1, 1 ;t1 XOR 1 = NOT t1 (inversion of bit t1)
+	stw t1, PAUSE(zero)
+	ret
+; END:pause_game
+
+; BEGIN:change_steps
+change_steps:
+	;t0 is the Seven Segment Display 3 associated to button 4 and a0
+	;t1 is the Seven Segment Display 2 associated to button 3 and a1
+	;t2 is the Seven Segment Display 1 associated to button 2 and a2
+	;t3 is the current number of steps in HEXADECIMAL
+
+	ldw t0, SEVEN_SEGS+12(zero)
+	ldw t1, SEVEN_SEGS+8(zero)
+	ldw t2, SEVEN_SEGS+4(zero)
+	ldw t3, CURR_STEP(zero)
+	
+	add t0, t0, a0
+	add t1, t1, a1
+	add t2, t2, a2	
+
+	stw t0, SEVEN_SEGS+12(zero)
+	stw t1, SEVEN_SEGS+8(zero)
+	stw t2, SEVEN_SEGS+4(zero)
+	
+	add t3, t3, a0
+	slli t4, a1, 4 ; a0 * 16 stored in t4  
+	slli t5, a2, 8 ; a0 * 16^2 stored in t5
+	add t3, t3, t4 ; increment time
+	add t3, t3, t5 ; increment time
+	stw t3, CURR_STEP(zero)
+	ret
+; END:change_steps
+
+; BEGIN:increment_seed
+increment_seed:
+	;if state is INIT increment seed by one and store new seed in current GSA
+	;t0 is the current state
+	add t1, zero, zero 
+	addi t1, t1, 1
+
+	ldw t0, CURR_STATE(zero)
+	beq t0, zero, increment_seed_init
+	beq t0, t1, increment_seed_rand
+
+; END:increment_seed
+
+; BEGIN:helper
+increment_seed_init:
+	ldw t0, SEED(zero)
+	addi t0, t0, 1
+	stw t0, SEED(zero)
+	
+	br set_gsa
+
+; END:helper
+
+; BEGIN:helper
+increment_seed_rand:
+
 ; END:helper
 
 font_data:
