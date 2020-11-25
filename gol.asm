@@ -32,25 +32,17 @@ main:
 	; Initialization of value // DONT DELETE OR WONT WORK
 	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
 	addi sp, zero, 8192		;Init stack pointer to end of memory
+	addi t0, t0, 1			; init value for speed
+	stw t0, SPEED(zero)		; load init value in speed register
+	stw t0, CURR_STEP(zero)	; default value currstep
+	stw t0, SEVEN_SEGS(zero); default value sevenseg
 
-	; Initialise default speed value to 1
-	ldw t0, SPEED(zero) 	
-	addi t0, t0, 1
-	stw t0, SPEED(zero)
 
-	;Initialise number of steps to default value 1 and corresponding Seven Segment Display
-	ldw t0, CURR_STEP(zero)
-	addi t0, t0, 1
-	stw t0, CURR_STEP(zero)
-	ldw t0, SEVEN_SEGS(zero)
-	addi t0, t0, 1
-	stw t0, SEVEN_SEGS(zero)
 
-	;Testing random_gsa:
-	;addi t0, zero, 3
-	;stw t0, RANDOM_NUM(zero)	
-	;call random_gsa
-	;break
+	;Testing random_gsa:	
+	call random_gsa
+	call draw_gsa
+	break
 
 	;Testing change_speed:
 	;addi a0, a0, 0
@@ -73,6 +65,7 @@ main:
 
 	;Testing increment_seed:
 	call increment_seed
+	call draw_gsa
 	break
 
 	;;TODO
@@ -109,7 +102,10 @@ wait:
 	addi t0, zero, 1
 	slli t0, t0, 3 ;19
 	ldw t2, SPEED(zero)
-	br decrement_timer_loop
+	decrement_timer_loop:
+	sub t0, t0, t2
+	bgeu t0, t2, decrement_timer_loop
+	ret
 ; END:wait
 
 ; BEGIN:get_gsa
@@ -126,8 +122,9 @@ get_gsa:
 set_gsa:
 	ldw t0, GSA_ID(zero)	; set t0 to the GSAID
 	slli t0, t0, 5
-	add t0, t0, a0
-	stw a1, GSA0(t0) 
+	slli t1, a1, 2
+	add t0, t0, t1
+	stw a0, GSA0(t0) 
 	ret
 ; END:set_gsa
 
@@ -142,58 +139,15 @@ draw_gsa:
 	add s1, zero, zero	; LEDS1
 	add s2, zero, zero	; LEDS2
 	add s4, zero, zero 	; x index in the leds (0, 8, 16 or 24)
-	call draw_gsa_iterator
-	stw s0, LEDS(zero)	;Set leds 0
-	stw s1, LEDS+4(zero);Set leds 1
-	stw s2, LEDS+8(zero);Set leds 2
-	
-	;POP
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
-; END:draw_gsa
-
-; BEGIN:random_gsa
-random_gsa:
-	;PUSH
-	addi sp, sp, -4
-	stw ra, 0(sp)
-
-	addi s0, zero, 11	;Max value of x coordinate (used for comparisons later)
-	addi s1, zero, 7	;Max value of y coordinate (used for comparions later)
-	addi a0, zero, -1
-	addi a1, zero, -1
-	call randomize_gsa
-
-	;POP
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
-; END:random_gsa
-
-; BEGIN:helper
-decrement_timer_loop:
-	sub t0, t0, t2
-	bgeu t0, t2, decrement_timer_loop
-	ret
-
-draw_gsa_iterator:
-	;PUSH
-	addi sp, sp, -4
-	stw ra, 0(sp)
-
+	draw_gsa_iterator:
 	addi t7, zero, 7		;8 in t7
 	call get_gsa
 	add s4, zero, zero
-	
-	; POP
-	ldw ra, 0(sp)
-	addi sp, sp, 4
 
 	blt a0, t7, draw_line_loop
-	ret
+	br end_draw
 	
-draw_line_loop:
+	draw_line_loop:
 	;s0=LEDS0 , s1=LEDS1, s2=LEDS2
 	add t5, s4, a0		;get shift index in the leds array
 
@@ -219,38 +173,104 @@ draw_line_loop:
 	addi s4, s4, 8		;add 8 to the column index 
 	br draw_line_loop	;else go to next iteration
 
-randomize_gsa:
+	end_draw:
+	stw s0, LEDS(zero)	;Set leds 0
+	stw s1, LEDS+4(zero);Set leds 1
+	stw s2, LEDS+8(zero);Set leds 2
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
+; END:draw_gsa
+
+; BEGIN:random_gsa
+random_gsa:
 	;PUSH
 	addi sp, sp, -4
 	stw ra, 0(sp)
 
+	addi s1, zero, 8	;Max value of y coordinate (used for comparisons later)
+	add a0, zero, zero
+	add a1, zero, zero
 
-	cmpeq t6, a0, s0	; Check if x coor equals max x coord
-	cmpeq t7, a1, s1	; Check if y coor equals max y coord
-	and t6, t6, t7		; and the both to know wether both are true
+	randomize_gsa:
+	ldw a0, RANDOM_NUM(zero)
+	call set_gsa
+	addi a1, a1, 1
+	blt a1, s1, randomize_gsa
+	br end_random_gsa
 
-	addi a1, a1, 1	;increment x coord
-	andi a1, a1, 7	;x coord mod 8 (to make it loop from 0 to 7)
-	cmpeqi t1, a1, 0
-	add a0, a0, t1	;increment y coord if x coord == 0
-
-	bne t6, zero, end_randomize_gsa ;end loop if both x and y reached max value
-
-	ldw t0, RANDOM_NUM(zero)	; Get the random value
-	andi t0, t0, 1				; random value % 2
-	
-	beq t0, zero, randomize_gsa	;If the value of t0 is 0 then we don't set the pixel 
-	call set_pixel				;else set the given pixel to 1
-
+	end_random_gsa:
 	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
-	br randomize_gsa
+	ret
+; END:random_gsa
 
-end_randomize_gsa:
+; BEGIN: update_state
+update_state:
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	ldw s1, CURR_STATE(zero)	; get value of the curr state in s1
+	beq s1, zero, update_init	; if curr state = 0 = init then update state init
+	addi t1, zero, 1			
+	beq s1, t1, update_rand		; if curr state = 1 = rand then update state rand
+	br update_run				; if curr state = 2 = run then update state run
+
+	update_init:
+	addi t1, zero, N_SEEDS		; set t1 to number of seeds
+	ldw t0, SEED(zero)			; amount of time b0 has been pressed
+	beq t0, t1, setStateRand	;if 1 next state is rand
+	andi t2, a0, 2 				; isolate input of button b1
+	bne t2, zero, setStateRun	; if b1 is pressed go to state run
+	br end_updater				; else remain instate init
+
+	update_rand:
+	andi t0, a0, 1				; isolate input of button b0
+	bne t0, zero, end_updater	; if b0 is pressed, stay in state rand hence finish updater. Needs to be done before checking b1 because we prioritize lsb 
+	andi t0, a0, 2 				; isolate input of button b1
+	bne t0, zero, setStateRun	; if b1 is pressed, go to run state
+	br end_updater				; else remain in state rand
+
+	update_run:
+	andi t0, a0, 1				; isolate input of button b0
+	andi t1, a0, 2				; isolate input of button b1
+	srli t1, t1, 1				; shift b1 input to lsb of t1
+	andi t2, a0, 4				; isolate input of button b2
+	srli t2, t2, 2				; shift b2 input to lsb of t2
+	or t0, t0, t1				; sets t0 to 1 if either b0 or b1 is pressed
+	or t0, t0, t2				; sets t0 to 1 if either b0 or b1 or b2 is pressed
+	bne t0, zero, end_updater	; if b0 or b1 or b2 is pressed we must remain in state run hence finishes version
+	andi t0, a0, 8				; isolate input of button b3
+	bne t0, zero, setStateInit	; if b3 is pressed go to state init
+	ldw t0, CURR_STEP(zero)		; get the number of steps left
+	beq t0, zero, setStateInit	; if reached max steps go to state init
+	br end_updater
+
+	; Setters for the state
+	setStateRand:
+	addi t0, zero, 1
+	stw t0, CURR_STATE(zero)
+	br end_updater
+
+	setStateInit:
+	stw zero, CURR_STATE(zero)
+	br end_updater
+
+	setStateRun:
+	addi t0, zero, 2
+	stw t0, CURR_STATE(zero)
+
+	end_updater:
+	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
+
+; BEGIN:helper
+
 ; END:helper
 
 ; BEGIN:change_speed
@@ -328,7 +348,7 @@ change_steps:
 	
 	add t3, t3, a0
 	slli t4, a1, 4 ; a0 * 16 stored in t4  
-	slli t5, a2, 8 ; a0 * 16^2 stored in t5
+	slli t5, a2, 8 ; a0 * 16^2 stored in t5s
 	add t3, t3, t4 ; increment time
 	add t3, t3, t5 ; increment time
 	stw t3, CURR_STEP(zero)
@@ -337,31 +357,50 @@ change_steps:
 
 ; BEGIN:increment_seed
 increment_seed:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
 	;if state is INIT increment seed by one and store new seed in current GSA
 	;t0 is the current state
-	add t1, zero, zero 
-	addi t1, t1, 1
+	addi t1, zero, 1
 
 	ldw t0, CURR_STATE(zero)
 	beq t0, zero, increment_seed_init
 	beq t0, t1, increment_seed_rand
+	br end
 
-; END:increment_seed
-
-; BEGIN:helper
-increment_seed_init:
+	increment_seed_init:
 	ldw t0, SEED(zero)
 	addi t0, t0, 1
 	stw t0, SEED(zero)
-	
-	br set_gsa
+	addi a0 ,zero, 0	; line value
+	addi a1 ,zero, 0	; line y coord
+	addi s2, zero, 8	; max y coord value
+	slli t0, t0, 2
+	ldw s1, SEEDS(t0)	; t1 is address of seed(0, 1, 2 or 3)
 
-; END:helper
+	increment_loop:
+	ldw a0, 0(s1)		; value of the line in the seed
+	call set_gsa
+	addi s1, s1, 4		; increment line
+	addi a1, a1, 1		; increment y coordinate
+	blt a1, s2, increment_loop
+	br end
 
-; BEGIN:helper
-increment_seed_rand:
+	increment_seed_rand:
+	call random_gsa
+	br end
 
-; END:helper
+	end:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
+
+; END:increment_seed
+
+
 
 font_data:
     .word 0xFC # 0
