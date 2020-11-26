@@ -35,14 +35,23 @@ main:
 	addi t0, t0, 1			; init value for speed
 	stw t0, SPEED(zero)		; load init value in speed register
 	stw t0, CURR_STEP(zero)	; default value currstep
-	stw t0, SEVEN_SEGS(zero); default value sevenseg
-
+	add t1, zero, zero
+	addi t1, t1, 4			; index display 1
+	ldw t2, font_data(zero)	; load hexadecimal value of 0
+	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 0
+	addi t1, t1, 4			; index display 2
+	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 1
+	addi t1, t1, 4			; index display 3
+	addi t3, t3, 4
+	ldw t2, font_data(t3)	; get the hexadecimal value of 1
+	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 1
+	
 
 
 	;Testing random_gsa:	
-	call random_gsa
-	call draw_gsa
-	break
+	;call random_gsa
+	;call draw_gsa
+	;break
 
 	;Testing change_speed:
 	;addi a0, a0, 0
@@ -57,16 +66,20 @@ main:
 	;break
 
 	;Testing change steps:
-	;addi a0, a0, 0
-	;addi a1, a1, 1
-	;addi a2, a2, 1
-	;call change_steps
-	;break
+	addi a0, a0, 1
+	addi a1, a1, 1
+	addi a2, a2, 1
+	call change_steps
+	addi a0, a0, 1
+	addi a1, a1, 1
+	addi a2, a2, 1
+	call change_steps
+	break
 
 	;Testing increment_seed:
-	call increment_seed
-	call draw_gsa
-	break
+	;call increment_seed
+	;call draw_gsa
+	;break
 
 	;;TODO
 
@@ -298,7 +311,6 @@ select_action:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
-
 ; END: select_action
 
 ; BEGIN:change_speed
@@ -312,15 +324,13 @@ change_speed:
 	beq a0, t0, ldw_speed_decrement
 	beq a0, zero, ldw_speed_increment
 
-; END:set_pixel
-
-; BEGIN:helper
-ldw_speed_increment:
+	ldw_speed_increment:
 	addi t1, zero, 10
 	ldw s0, SPEED(zero)
 	blt s0, t1, speed_increment 
 	ret
-ldw_speed_decrement:
+
+	ldw_speed_decrement:
 	addi t1, zero, 2
 	ldw s0, SPEED(zero)
 	bge s0, t1, speed_decrement 
@@ -330,11 +340,11 @@ speed_increment:
 	stw s0, SPEED(zero)
 	ret
 
-speed_decrement:
+	speed_decrement:
 	addi s0, s0, -1
 	stw s0, SPEED(zero)
 	ret
-; END:helper 
+; END:set_pixel
 
 ; BEGIN:pause_game
 pause_game:
@@ -348,7 +358,7 @@ pause_game:
 
 ; BEGIN:change_steps
 change_steps:
-	;t0 is the Seven Segment Display 3 associated to button 4 and a0
+	;t0 is the Seven Segment Display 3 (most to right) associated to button 4 and a0
 	;t1 is the Seven Segment Display 2 associated to button 3 and a1
 	;t2 is the Seven Segment Display 1 associated to button 2 and a2
 	;t3 is the current number of steps in HEXADECIMAL
@@ -357,22 +367,64 @@ change_steps:
 	ldw t1, SEVEN_SEGS+8(zero)
 	ldw t2, SEVEN_SEGS+4(zero)
 	ldw t3, CURR_STEP(zero)
-	
-	add t0, t0, a0
-	add t1, t1, a1
-	add t2, t2, a2	
+	add t4, zero, zero
+	add t5, zero, zero
+	addi t4, t4, 4 ; which display will be updated first
+	add s2, zero, zero ; set index to word to 0
+	add s1, zero, zero 
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
 
-	stw t0, SEVEN_SEGS+12(zero)
-	stw t1, SEVEN_SEGS+8(zero)
-	stw t2, SEVEN_SEGS+4(zero)
+	br update_display
+
+	update_display:
+	add s1, s1, t2 ;s1 stores value of the seven_segs that will be updated
+	add t5, t5, a2
+	call loop
+
+	add s1, s1, t1
+	add t5, t5, a1
+	call loop	
 	
+	add s1, s1, t0 
+	add t5, t5, a0
+	call loop
+
+	br increment_number_steps
+
+	loop: 
+	beq t5, zero, finish_loop
+	ldw t6, font_data(s2)
+	beq t6, s1, stw_display
+	addi s2, s2, 4
+	br loop
+
+	stw_display:
+	addi s2, s2, 4
+	ldw t7, font_data(s2)
+	stw t7, SEVEN_SEGS(t4)
+	br finish_loop
+
+	finish_loop:
+	add t5, zero, zero
+	addi t4, t4, 4
+	add s1, zero, zero 
+	add s2, zero, zero
+	ret
+
+	increment_number_steps:
 	add t3, t3, a0
 	slli t4, a1, 4 ; a0 * 16 stored in t4  
 	slli t5, a2, 8 ; a0 * 16^2 stored in t5s
 	add t3, t3, t4 ; increment time
 	add t3, t3, t5 ; increment time
 	stw t3, CURR_STEP(zero)
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
 	ret
+
 ; END:change_steps
 
 ; BEGIN:increment_seed
@@ -420,6 +472,47 @@ increment_seed:
 
 ; END:increment_seed
 
+; BEGIN:cell_fate
+cell_fate:
+	addi t0, t0, 2
+	addi t1, t1, 3
+	addi t2, t2, 4
+
+	blt a0, t0, set_dead	;has less then 2 neighbours
+	bge a0, t2, set_dead	;has more than 3 neighbours
+	beq a0, t0, current_state	;has 2 neighbours if dead stays dead, if alive stays alive
+	beq a0, t1, set_alive 	;reproduction	
+
+	set_alive:
+	addi v0, zero, 1
+	ret
+
+	set_dead:
+	add v0, zero, zero
+	ret
+
+	current_state:
+	add v0, a1, zero
+	ret
+; END: cell_fate 
+
+; BEGIN:find_neighbours
+find_neighbours:
+	addi t0, zero, 1
+	; what is in cell t1?	
+	t1
+
+	beq t1, t0, increment_neighbour_count
+
+	;set s3 (the x coordinate) return the s0 and s1
+	get_LED_index: 
+		andi s0, s3, 3	;x mod 4 correspond to which LED array we fall in
+		srli s1, s3, 2	;floor(x/4) is the selected word in LED
+		
+	increment_neighbour_count:
+		addi v0, v0, 1 		
+
+; END:find_neighbours
 
 
 font_data:
