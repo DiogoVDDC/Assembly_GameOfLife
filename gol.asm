@@ -588,6 +588,11 @@ find_neighbours:
 update_gsa:
 ; END:update_gsa
 
+; BEGIN:mask
+mask:
+; END:mask
+
+
 ; BEGIN:get_input
 get_input:
 ; END:get_input
