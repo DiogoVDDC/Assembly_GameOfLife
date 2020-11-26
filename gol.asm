@@ -56,8 +56,6 @@ main:
 	;Testing change_speed:
 	;addi a0, a0, 0
 	;call change_speed
-	;addi a0, a0, 1
-	;call change_speed
 	;break
 
 	;Testing pause_game:
@@ -289,24 +287,76 @@ select_action:
 	addi sp, sp, -4
 	stw ra, 0(sp)
 	
-	call update_state
-
-	andi t0, a0, 1
-	bne t0, zero,  
-	add a1 , zero, zero	;init a0 to 0
+	add s7, a0, zero	;stores a0 in s7 to be able to restore it at the end
 	
-	initButtonHandling:
-	andi t0, a0, 1		;isolate input of b0
-	; do stuff if t0 = 1
-	andi t0, a0, 2		;isolate input of b1
-	; do stuff if t0 = 1
-	andi t0, a0, 4		;isolate input of b2
-	; do stuff if t0 = 1
-	andi t0, a0, 8		;isolate input of b3
-	; do stuff if t0 = 1
-	andi t0, a0, 16		;isolate input of b4
-	; do stuff if t0 = 1
-	end_select:
+	stw t0, CURR_STATE(zero)	
+	cmpeqi t0, t0, 2
+	beq t0, zero, actionInitRand
+	br actionRun
+
+	; ACTIONS OF RAND AND INIT STATE
+	actionInitRand:
+	andi t0, a0, 1	;input b0
+	bne t0, zero, initB0
+	andi t0, a0, 2	;input b1
+	bne t0, a0, initB1
+	br initB234
+	andi t0, a0, 4
+	br end_select
+
+	initB0:				;actions of b0
+	call increment_seed
+	br end_select
+	initB1:				;actions of b1
+	br end_select
+	initB234:			;actions of b2
+	andi t0, a0, 4
+	cmpeqi a2, t0, 1
+	andi t0, a0, 8    
+	cmpeqi a1, t0, 1
+	andi t0, a0, 16
+	cmpeqi a0, t0, 1
+	call change_steps
+	br end_select
+
+	; ACTIONS OF RUN STATE
+	actionRun:	
+	andi t0, a0, 1	;input of b0
+	bne t0, zero, runB0
+	andi t0, a0, 2	;input of b1
+	bne t0, zero, runB1
+	andi t0, a0, 4	;input of b2
+	bne t0, zero, runB2
+	andi t0, a0, 8	;input of b3
+	bne t0, zero, runB3
+	andi t0, a0, 16	;input of b4
+	bne t0, zero, runB4
+	br end_select	;if no input, just go to the end
+	
+	runB0:	;actions of b0
+	call pause_game
+	br end_select
+
+	runB1:	;actions of b1
+	addi a0, zero, 0
+	call change_speed
+	br end_select
+
+	runB2:	;actions of b2
+	addi a0, zero, 1
+	call change_speed
+	br end_select
+	
+	runB3:	;actions of b3
+	call reset_game
+	br end_select
+	
+	runB4:	;actions of b4
+	call random_gsa
+	br end_select	
+
+	end_select:		
+	add a0, zero, s7	; put original a0 back in place
 	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
@@ -315,6 +365,22 @@ select_action:
 
 ; BEGIN:change_speed
 change_speed: 
+	ldw t0, SPEED(zero)
+	beq a0, zero, increment_speed
+
+	decrement_speed:
+	cmpgei t1, t0, 2
+	beq t1, zero, end_change_speed
+	addi t0, t0, -1
+	br end_change_speed
+	increment_speed:
+	cmpgei t1, t0, 10
+	bne t1, zero, end_change_speed
+	addi t0, t0, 1
+	end_change_speed:
+	stw t0, SPEED(zero)
+	ret
+
 	; a0 is 1 if speed is to be incremented, 0 if speed to be decremented
 	add s0, zero, zero
 	add t0, zero, zero
@@ -335,7 +401,7 @@ change_speed:
 	ldw s0, SPEED(zero)
 	bge s0, t1, speed_decrement 
 	ret
-speed_increment:
+	speed_increment:
 	addi s0, s0, 1
 	stw s0, SPEED(zero)
 	ret
@@ -344,7 +410,7 @@ speed_increment:
 	addi s0, s0, -1
 	stw s0, SPEED(zero)
 	ret
-; END:set_pixel
+; END:change_speed
 
 ; BEGIN:pause_game
 pause_game:
@@ -451,8 +517,10 @@ increment_seed:
 	addi s2, zero, 8	; max y coord value
 	slli t0, t0, 2
 	ldw s1, SEEDS(t0)	; t1 is address of seed(0, 1, 2 or 3)
+	ldw t1, MASKS(t0)	; address of the mask
+	stw t1, MASK(zero)	; stores the address of the mask in the RAM
 
-	increment_loop:
+	increment_loop:		; applies the seed to the gsa
 	ldw a0, 0(s1)		; value of the line in the seed
 	call set_gsa
 	addi s1, s1, 4		; increment line
@@ -461,6 +529,10 @@ increment_seed:
 	br end
 
 	increment_seed_rand:
+	addi t0, zero, N_SEEDS
+	slli t0, t0, 4
+	ldw t0, MASKS+N_SEEDS(zero) ; load
+	stw t0, MASK(zero)
 	call random_gsa
 	br end
 
@@ -500,19 +572,41 @@ cell_fate:
 find_neighbours:
 	addi t0, zero, 1
 	; what is in cell t1?	
-	t1
+	;t1
 
 	beq t1, t0, increment_neighbour_count
 
 	;set s3 (the x coordinate) return the s0 and s1
-	get_LED_index: 
-		andi s0, s3, 3	;x mod 4 correspond to which LED array we fall in
-		srli s1, s3, 2	;floor(x/4) is the selected word in LED
+
 		
 	increment_neighbour_count:
 		addi v0, v0, 1 		
 
 ; END:find_neighbours
+
+; BEGIN:update_gsa
+update_gsa:
+; END:update_gsa
+
+; BEGIN:get_input
+get_input:
+; END:get_input
+
+; BEGIN:decrement_step
+decrement_step:
+; END:decrement_step
+
+; BEGIN:reset_game
+reset_game:
+; END:reset_game
+
+; BEGIN:helper
+	.equ MASK, 0x1200 
+
+get_LED_index: 
+	andi s0, s3, 3	;x mod 4 correspond to which LED array we fall in
+	srli s1, s3, 2	;floor(x/4) is the selected word in LED
+; END:helper
 
 
 font_data:
