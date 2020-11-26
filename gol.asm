@@ -31,23 +31,14 @@
 main:
 	; Initialization of value // DONT DELETE OR WONT WORK
 	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
-	addi sp, zero, 8192		;Init stack pointer to end of memory
-	addi t0, t0, 1			; init value for speed
+	addi sp, zero, 8192		;Init stack pointer to end of memory (0x2000)
+	addi t0, zero, 1		;init value for speed
 	stw t0, SPEED(zero)		; load init value in speed register
 	stw t0, CURR_STEP(zero)	; default value currstep
-	add t1, zero, zero
-	addi t1, t1, 4			; index display 1
-	ldw t2, font_data(zero)	; load hexadecimal value of 0
-	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 0
-	addi t1, t1, 4			; index display 2
-	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 1
-	addi t1, t1, 4			; index display 3
-	addi t3, t3, 4
-	ldw t2, font_data(t3)	; get the hexadecimal value of 1
-	stw t2, SEVEN_SEGS(t1)	; default value sevenseg to 1
-	
-
-
+	stw t0, CURR_STEP(zero)	;put the value of the 7seg to init value
+	call set_7Seg			;initialize 7seg to init value
+	call reset_gsa
+	call draw_gsa
 	;Testing random_gsa:	
 	;call random_gsa
 	;call draw_gsa
@@ -64,15 +55,29 @@ main:
 	;break
 
 	;Testing change steps:
-	addi a0, a0, 1
-	addi a1, a1, 1
-	addi a2, a2, 1
-	call change_steps
-	addi a0, a0, 1
-	addi a1, a1, 1
-	addi a2, a2, 1
-	call change_steps
-	break
+	;addi a0, zero, 1
+	;addi a1, zero, 1
+	;addi a2, zero, 1
+	;call change_steps
+	;addi a0, zero, 1
+	;addi a1, zero, 0
+	;addi a2, zero, 0
+	;call change_steps
+	;call set_7Seg
+	;break	
+
+	;Testing decrement_step
+	;addi t0, zero, 2
+	;stw t0, CURR_STATE(zero)
+	;call decrement_step
+	;call decrement_step
+	;break;
+
+	;Testing set 7seg
+	;addi t0, zero, 0xEAD
+	;stw t0, CURR_STEP(zero)
+	;call set_7Seg
+	;break
 
 	;Testing increment_seed:
 	;call increment_seed
@@ -131,7 +136,7 @@ get_gsa:
 
 ; BEGIN:set_gsa
 set_gsa:
-	ldw t0, GSA_ID(zero)	; set t0 to the GSAID
+	ldw t0, GSA_ID(zero)	; set t0 to the current GSAID
 	slli t0, t0, 5
 	slli t1, a1, 2
 	add t0, t0, t1
@@ -267,13 +272,19 @@ update_state:
 	br end_updater
 
 	setStateInit:
-	stw zero, CURR_STATE(zero)
+	bne s1, zero, RandOrRunToInit	;if the previous state wasn't already init, we need to reset the game
+	stw zero, CURR_STATE(zero)		;not necessary since the previous state is already supposed to be init but just in case
 	br end_updater
 
 	setStateRun:
 	addi t0, zero, 2
 	stw t0, CURR_STATE(zero)
 
+	RandOrRunToInit:
+	call reset_game		; if going from rand or run to init we must call reset game
+	stw zero, CURR_STATE(zero)
+
+	; Ends the updater
 	end_updater:
 	;POP
 	ldw ra, 0(sp)
@@ -305,6 +316,8 @@ select_action:
 	br end_select
 
 	initB0:				;actions of b0
+	ldw t0, CURR_STEP(zero)	;loads the selected amount of steps
+	stw t0, CURR_STEP(zero)	;set the game steps to the selected amount
 	call increment_seed
 	br end_select
 	initB1:				;actions of b1
@@ -317,6 +330,7 @@ select_action:
 	andi t0, a0, 16
 	cmpeqi a0, t0, 1
 	call change_steps
+	call set_7Seg
 	br end_select
 
 	; ACTIONS OF RUN STATE
@@ -424,73 +438,20 @@ pause_game:
 
 ; BEGIN:change_steps
 change_steps:
-	;t0 is the Seven Segment Display 3 (most to right) associated to button 4 and a0
-	;t1 is the Seven Segment Display 2 associated to button 3 and a1
-	;t2 is the Seven Segment Display 1 associated to button 2 and a2
-	;t3 is the current number of steps in HEXADECIMAL
-
-	ldw t0, SEVEN_SEGS+12(zero)
-	ldw t1, SEVEN_SEGS+8(zero)
-	ldw t2, SEVEN_SEGS+4(zero)
-	ldw t3, CURR_STEP(zero)
-	add t4, zero, zero
-	add t5, zero, zero
-	addi t4, t4, 4 ; which display will be updated first
-	add s2, zero, zero ; set index to word to 0
-	add s1, zero, zero 
-	;PUSH 
-	addi sp, sp, -4
-	stw ra, 0(sp)
-
-	br update_display
-
-	update_display:
-	add s1, s1, t2 ;s1 stores value of the seven_segs that will be updated
-	add t5, t5, a2
-	call loop
-
-	add s1, s1, t1
-	add t5, t5, a1
-	call loop	
+	ldw t0, CURR_STEP(zero)
 	
-	add s1, s1, t0 
-	add t5, t5, a0
-	call loop
+	add t0, t0, a0	;if b4 was pressed, a0 equals zero hence a unit is added, else nothing is added
+	
+	add t1, zero, a1
+	slli t1, t1, 4	;if b3 was pressed then a1=1 and moving it by 4 to change it to 16 (value of a ten in hexa)
+	add t0, t0, t1	;if t1 wasn't 0, adds a tens
 
-	br increment_number_steps
+	add t1, zero, a2
+	slli t1, t1, 8	;if b2 was pressed then a1=1 and moving it by 8 to change it to 256 (value of a hundred in hexa)	
+	add t0, t0, t1
 
-	loop: 
-	beq t5, zero, finish_loop
-	ldw t6, font_data(s2)
-	beq t6, s1, stw_display
-	addi s2, s2, 4
-	br loop
-
-	stw_display:
-	addi s2, s2, 4
-	ldw t7, font_data(s2)
-	stw t7, SEVEN_SEGS(t4)
-	br finish_loop
-
-	finish_loop:
-	add t5, zero, zero
-	addi t4, t4, 4
-	add s1, zero, zero 
-	add s2, zero, zero
+	stw t0, CURR_STEP(zero)
 	ret
-
-	increment_number_steps:
-	add t3, t3, a0
-	slli t4, a1, 4 ; a0 * 16 stored in t4  
-	slli t5, a2, 8 ; a0 * 16^2 stored in t5s
-	add t3, t3, t4 ; increment time
-	add t3, t3, t5 ; increment time
-	stw t3, CURR_STEP(zero)
-	;POP
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
-
 ; END:change_steps
 
 ; BEGIN:increment_seed
@@ -546,9 +507,9 @@ increment_seed:
 
 ; BEGIN:cell_fate
 cell_fate:
-	addi t0, t0, 2
-	addi t1, t1, 3
-	addi t2, t2, 4
+	addi t0, zero, 2
+	addi t1, zero, 3
+	addi t2, zero, 4
 
 	blt a0, t0, set_dead	;has less then 2 neighbours
 	bge a0, t2, set_dead	;has more than 3 neighbours
@@ -564,28 +525,90 @@ cell_fate:
 	ret
 
 	current_state:
-	add v0, a1, zero
+	add v0, zero, a1
 	ret
 ; END: cell_fate 
 
 ; BEGIN:find_neighbours
 find_neighbours:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	;Just for testing
+	call get_pixel
+	add v1, zero, v0
+	addi v0, zero, 2
+	br end_find_neigh
+	
+
 	addi t0, zero, 1
 	; what is in cell t1?	
 	;t1
 
 	beq t1, t0, increment_neighbour_count
 
-	;set s3 (the x coordinate) return the s0 and s1
-
+	
 		
 	increment_neighbour_count:
 		addi v0, v0, 1 		
+
+	end_find_neigh:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 
 ; END:find_neighbours
 
 ; BEGIN:update_gsa
 update_gsa:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+	
+	add s5, zero, zero	; x axis
+	add s6, zero, zero	; y axis
+	add s7, zero, zero	; holds new gsa row value
+
+	updater_loop:	
+	add a0, zero, s5	;input x of find_neighbours to current x val
+	add a1, zero, s6	;input y of find_neighbours to current y val
+	call find_neighbours	
+	add a0, zero, v0	; input live cells of cell_fate
+	add a1, zero, v1	; input state of cell_fate
+	call cell_fate	
+
+	slli v0, v0, 12
+	add s7, s7, v0		;adds the new value of the cell to the gsa row
+	srli s7, s7, 1		
+	
+	addi t0, zero, 12	;t0 holds max val of x
+	beq s5, t0,  changeLine
+
+	changeLine:
+	ldw t0, GSA_ID(zero)
+	xori t0, t0, 1		;inverts GSA_ID (because set_gsa change the gsa of the currently in used GSA hence we needed to reverse it so that it changes the next GSA)
+	stw t0, GSA_ID(zero)
+	add a0, zero, s7	;set input for set_gsa
+	add a1, zero, s6	;set input for set_gsa
+	call set_gsa		
+	ldw t0, GSA_ID(zero)
+	xori t0, t0, 1		;re-inverse GSA_ID
+	stw t0, GSA_ID(zero)
+	
+	addi t0, zero, 7
+	beq s6, t0, end_update_gsa	;if reached max line, end 
+	addi s6, s6, 1		;else increment y 
+	add s5, zero, zero	;reset x coord to 0
+	add s7, zero, zero	;resets the gsa row to zero to start again
+	br updater_loop
+	
+	end_update_gsa:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 ; END:update_gsa
 
 ; BEGIN:mask
@@ -594,22 +617,123 @@ mask:
 
 ; BEGIN:get_input
 get_input:
+	ldw t0, BUTTONS+4(zero)		;get edge capture input
+	addi t1, zero, 31			;mask to only keep 5 least significant bits of the edgecapture
+	and v0, t0, t1				;use mask on edgecapture
+	stw zero, BUTTONS+4(zero)	;clear the edgecapture 
+	ret
 ; END:get_input
 
 ; BEGIN:decrement_step
 decrement_step:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	ldw t0, CURR_STATE(zero)
+	addi t1, zero, 2
+	beq t0, t1, RunStateDecrement	
+	
+	InitRandDecrement:
+	call set_7Seg
+	add v0, zero, zero
+	br end_decrement_step
+
+	RunStateDecrement:
+	ldw t1, CURR_STEP(zero)	;get the amount of step remaining
+	cmpeq v0, t1, zero		;if steps remaining=0 set v0 to 1
+	beq t1, zero, end_decrement_step	;if steps remaining was 0 go to the end
+	addi t1, t1, -1			;decrement steps
+	stw t1, CURR_STEP(zero)	;update remaining steps value
+	call set_7Seg
+
+	end_decrement_step:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 ; END:decrement_step
 
 ; BEGIN:reset_game
 reset_game:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	addi t0, zero, 1		;t0 holds value 1
+	stw t0, CURR_STEP(zero)	;set steps t0 1
+	call set_7Seg			;display current amount of steps
+
+	stw zero, SEED(zero)	;set seed to 0
+
+	stw zero, GSA_ID(zero)	;set GSA_ID to 0
+	call reset_gsa			;set gsa0 to seed0
+	
+	stw zero, PAUSE(zero)	;pauses the game
+	stw t1, SPEED(zero)		;set speed to 1 (t0 = 1)
+		
+
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 ; END:reset_game
 
 ; BEGIN:helper
 .equ MASK, 0x1200 
 
-get_pixel: 	
-	andi s0, s3, 3	;x mod 4 correspond to which LED array we fall in
-	srli s1, s3, 2	;floor(x/4) is the selected word in LED
+reset_gsa:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	add a1, zero, zero	;y coord
+	loop_reset_gsa:
+	slli t0, a1, 2	;multiplies a1 by 4
+	ldw a0, seed0(t0)	;yth line of seed 0
+	call set_gsa
+	
+	addi t1, zero, 7	;max value for y coord
+	beq a1, t1, end_reset_gsa	;if reached max value for y, end loop 
+	addi a1, a1, 1				;else increment y
+	br loop_reset_gsa
+
+	end_reset_gsa:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
+	
+
+set_7Seg:	;Given the amount of steps to be displayed on the 7seg displays, finds the correct code for each 7seg
+	addi t0, zero, 12		;loop counter
+	ldw t1,	CURR_STEP(zero)	;load the number of steps to be displayed
+	slli t1, t1, 4
+	addi t2, zero, 15		;mask to keep only 4 lsbs
+	loop_set7Seg:
+	srli t1, t1, 4
+	and t3, t1, t2			;masks the 4 lsb
+	slli t3, t3, 2			;multiplise t3 by 4
+	ldw t4, font_data(t3)	;get code for the 7seg corresponding to the 4 lsbs
+	stw t4, SEVEN_SEGS(t0)	;stores the code
+	beq t0, zero, end_set_7seg
+	addi t0, t0, -4		
+	br loop_set7Seg
+	
+	end_set_7seg:
+	ret
+	
+get_pixel: 	;given coords (x,y) (in (a0, a1)) returns the state of the cell in v0
+	;a0 is x axis, a1 is y axis
+	srli t0, a0, 2	;divides x axis by 4
+	ldw t1, LEDS(t0);load the corresponding led array
+	andi t0, a0, 3	;x modulo 4
+	slli t0, t0, 3	;(x%4) * 8
+	add t0, t0, a1	;add y input to get the index of the pixel in the array
+	and t0, t0, t1	;isolate the bit at the given index in the array
+	cmpne v0, t0, zero	;if isolated bit isn't zero then it's alive hence v0 is 1
+	ret
+
 ; END:helper
 
 
