@@ -268,10 +268,38 @@ update_state:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
+; END:update_state
+	
+; BEGIN:select_action
+select_action:
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
+	
+	call update_state
 
-; BEGIN:helper
+	andi t0, a0, 1
+	bne t0, zero,  
+	add a1 , zero, zero	;init a0 to 0
+	
+	initButtonHandling:
+	andi t0, a0, 1		;isolate input of b0
+	; do stuff if t0 = 1
+	andi t0, a0, 2		;isolate input of b1
+	; do stuff if t0 = 1
+	andi t0, a0, 4		;isolate input of b2
+	; do stuff if t0 = 1
+	andi t0, a0, 8		;isolate input of b3
+	; do stuff if t0 = 1
+	andi t0, a0, 16		;isolate input of b4
+	; do stuff if t0 = 1
+	end_select:
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 
-; END:helper
+; END: select_action
 
 ; BEGIN:change_speed
 change_speed: 
@@ -292,24 +320,16 @@ ldw_speed_increment:
 	ldw s0, SPEED(zero)
 	blt s0, t1, speed_increment 
 	ret
-; END:helper 
-
-; BEGIN:helper
 ldw_speed_decrement:
 	addi t1, zero, 2
 	ldw s0, SPEED(zero)
 	bge s0, t1, speed_decrement 
 	ret
-; END:helper 
-
-; BEGIN:helper
 speed_increment:
 	addi s0, s0, 1
 	stw s0, SPEED(zero)
 	ret
-; END:helper
 
-; BEGIN:helper
 speed_decrement:
 	addi s0, s0, -1
 	stw s0, SPEED(zero)
