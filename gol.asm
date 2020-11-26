@@ -592,7 +592,6 @@ update_gsa:
 mask:
 ; END:mask
 
-
 ; BEGIN:get_input
 get_input:
 ; END:get_input
@@ -606,9 +605,9 @@ reset_game:
 ; END:reset_game
 
 ; BEGIN:helper
-	.equ MASK, 0x1200 
+.equ MASK, 0x1200 
 
-get_LED_index: 
+get_pixel: 	
 	andi s0, s3, 3	;x mod 4 correspond to which LED array we fall in
 	srli s1, s3, 2	;floor(x/4) is the selected word in LED
 ; END:helper
