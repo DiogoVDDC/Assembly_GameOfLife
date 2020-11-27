@@ -29,16 +29,44 @@
     .equ RUNNING, 0x01
 
 main:
+
+
 	; Initialization of value // DONT DELETE OR WONT WORK
 	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
 	addi sp, zero, 8192		;Init stack pointer to end of memory (0x2000)
-	addi t0, zero, 1		;init value for speed
-	stw t0, SPEED(zero)		; load init value in speed register
-	stw t0, CURR_STEP(zero)	; default value currstep
-	stw t0, CURR_STEP(zero)	;put the value of the 7seg to init value
-	call set_7Seg			;initialize 7seg to init value
-	call reset_gsa
+
+	loop1:
+	call reset_game
 	call draw_gsa
+
+	addi a1, zero, 6
+	addi a0, zero, 2
+	call get_pixel 
+
+	break
+	call get_input		;sets v0 to edgecapturesele
+	add v1, zero, zero
+	loop2:
+	add a0, zero, v0
+	call select_action	;did not change value of v0
+	add a0, zero, v0
+	call update_state
+	call update_gsa
+	call draw_gsa
+	call wait
+	call decrement_step
+	add v1, zero, v0
+	call get_input
+	beq v1, zero, loop2
+	br loop1
+
+	;addi t0, zero, 1		;init value for speed
+	;stw t0, SPEED(zero)		; load init value in speed register
+	;stw t0, CURR_STEP(zero)	; default value currstep
+	;stw t0, CURR_STEP(zero)	;put the value of the 7seg to init value
+	;call set_7Seg			;initialize 7seg to init value
+	;call reset_gsa
+	;call draw_gsa
 	;Testing random_gsa:	
 	;call random_gsa
 	;call draw_gsa
@@ -150,13 +178,14 @@ draw_gsa:
 	addi sp, sp, -4
 	stw ra, 0(sp)
 	
+	call clear_leds
 	add a0, zero, zero	; line index (0,1,2,3,4,5,6 or 7)
 	add s0, zero, zero	; LEDS0
 	add s1, zero, zero	; LEDS1
 	add s2, zero, zero	; LEDS2
 	add s4, zero, zero 	; x index in the leds (0, 8, 16 or 24)
 	draw_gsa_iterator:
-	addi t7, zero, 7		;8 in t7
+	addi t7, zero, 8		;8 in t7
 	call get_gsa
 	add s4, zero, zero
 
@@ -236,9 +265,12 @@ update_state:
 	br update_run				; if curr state = 2 = run then update state run
 
 	update_init:
-	addi t1, zero, N_SEEDS		; set t1 to number of seeds
+	andi t2, a0, 1				;isolate input of b1
+	addi t1, zero, N_SEEDS		; set t1 to max number of seeds
 	ldw t0, SEED(zero)			; amount of time b0 has been pressed
-	beq t0, t1, setStateRand	;if 1 next state is rand
+	cmpeq t0, t1, t0			;sets t2 if reached max number of seeds
+	and t0, t0, t2				;sets t0 if pressed b0 and reached max seed
+	bne t0, zero, setStateRand	;sets to state Rand if b0 is pressed and we've reached max seeds
 	andi t2, a0, 2 				; isolate input of button b1
 	bne t2, zero, setStateRun	; if b1 is pressed go to state run
 	br end_updater				; else remain instate init
@@ -279,6 +311,7 @@ update_state:
 	setStateRun:
 	addi t0, zero, 2
 	stw t0, CURR_STATE(zero)
+	br end_updater
 
 	RandOrRunToInit:
 	call reset_game		; if going from rand or run to init we must call reset game
@@ -300,7 +333,7 @@ select_action:
 	
 	add s7, a0, zero	;stores a0 in s7 to be able to restore it at the end
 	
-	stw t0, CURR_STATE(zero)	
+	ldw t0, CURR_STATE(zero)	
 	cmpeqi t0, t0, 2
 	beq t0, zero, actionInitRand
 	br actionRun
@@ -310,25 +343,23 @@ select_action:
 	andi t0, a0, 1	;input b0
 	bne t0, zero, initB0
 	andi t0, a0, 2	;input b1
-	bne t0, a0, initB1
+	bne t0, zero, initB1
 	br initB234
 	andi t0, a0, 4
 	br end_select
 
 	initB0:				;actions of b0
-	ldw t0, CURR_STEP(zero)	;loads the selected amount of steps
-	stw t0, CURR_STEP(zero)	;set the game steps to the selected amount
 	call increment_seed
 	br end_select
 	initB1:				;actions of b1
 	br end_select
 	initB234:			;actions of b2
 	andi t0, a0, 4
-	cmpeqi a2, t0, 1
+	cmpne a2, t0, zero	;set input a2 of change steps
 	andi t0, a0, 8    
-	cmpeqi a1, t0, 1
+	cmpne a1, t0, zero	;set input a1 of change steps
 	andi t0, a0, 16
-	cmpeqi a0, t0, 1
+	cmpne a0, t0, zero	;set input a0 of change steps
 	call change_steps
 	call set_7Seg
 	br end_select
@@ -566,6 +597,9 @@ update_gsa:
 	;PUSH 
 	addi sp, sp, -4
 	stw ra, 0(sp)
+
+	ldw t0, PAUSE(zero)
+	beq t0, zero, end_update_gsa
 	
 	add s5, zero, zero	; x axis
 	add s6, zero, zero	; y axis
@@ -613,6 +647,28 @@ update_gsa:
 
 ; BEGIN:mask
 mask:
+	;PUSH 
+	addi sp, sp, -4
+	stw ra, 0(sp)
+
+	add a0, zero, zero	;y coord
+	ldw t0, MASK(zero)	;gets mask index
+	ldw s0, MASKS(t0)	;get corresponding mask starting address
+	loop_mask:
+	call get_gsa		;v0 now contains current gsa row
+	ldw t1, 0(s0)		;gets mask for the current line
+	and t0, v0, t1		;apply the mask
+	add a1, zero, a0	;sets y coord for function set_gsa
+	add a0, zero, t0	;sets line for function set_gsa
+	call set_gsa		;puts the masked gsa back in place
+	addi a0, a1, 1		;increments line and puts it back into a0
+	addi t0, zero, 8	;max y value
+	blt a0, t0, loop_mask
+
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
+	ret
 ; END:mask
 
 ; BEGIN:get_input
@@ -670,7 +726,8 @@ reset_game:
 	call reset_gsa			;set gsa0 to seed0
 	
 	stw zero, PAUSE(zero)	;pauses the game
-	stw t1, SPEED(zero)		;set speed to 1 (t0 = 1)
+	addi t0, zero, 1
+	stw t0, SPEED(zero)		;set speed to 1 (t0 = 1)
 		
 
 	;POP
@@ -730,7 +787,9 @@ get_pixel: 	;given coords (x,y) (in (a0, a1)) returns the state of the cell in v
 	andi t0, a0, 3	;x modulo 4
 	slli t0, t0, 3	;(x%4) * 8
 	add t0, t0, a1	;add y input to get the index of the pixel in the array
-	and t0, t0, t1	;isolate the bit at the given index in the array
+	addi t2, zero, 1
+	sll t2, t2, t0
+	and t0, t2, t1	;isolate the bit at the given index in the array
 	cmpne v0, t0, zero	;if isolated bit isn't zero then it's alive hence v0 is 1
 	ret
 
