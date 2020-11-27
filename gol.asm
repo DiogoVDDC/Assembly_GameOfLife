@@ -39,6 +39,11 @@ main:
 	call set_7Seg			;initialize 7seg to init value
 	call reset_gsa
 	call draw_gsa
+	addi a0, zero, 0
+	addi a1, zero, 0
+	call get_pixel
+
+	break
 	;Testing random_gsa:	
 	;call random_gsa
 	;call draw_gsa
@@ -535,26 +540,69 @@ find_neighbours:
 	addi sp, sp, -4
 	stw ra, 0(sp)
 
-	;Just for testing
+	add s0, a0, zero
+	add s1, a1, zero
+
+	addi s3, zero, -1	; offset in x direction
+	addi s4, zero, -1	; offset in y direction
+	add s5, zero, zero ; number of neighbours
+	
+	initialise_parameter:
+	addi t2, zero, 7	; mask for mod 8
+	addi t3, zero, 12
+	addi t4, zero, 1
+
+	cmpeqi t5, s3, 0	;whether x offset is equal to 0
+	cmpeqi t6, s4, 0	;whether y offset is equal to 0
+	and t7, t5, t6
+	bne t7, zero, set_return_param_1 ;if both offset are equal to 0 skip cell
+	
+	add a0, s0, s3		; x value to be selected without mod applied
+	add a1, s1, s4 		; y value to be selected without mod applied
+	and a1, a1, t2 		; y mod 8
+
+	blt a0, zero, negative_a
+	beq a0, t3, zero_a
+	br get_pixel_loop
+	
+	negative_a:
+	addi a0, zero, 11
+	br get_pixel_loop
+
+	zero_a:
+	add a0, zero, zero
+	br get_pixel_loop
+	
+	get_pixel_loop:
 	call get_pixel
-	add v1, zero, v0
-	addi v0, zero, 2
-	br end_find_neigh
-	
-
-	addi t0, zero, 1
-	; what is in cell t1?	
-	;t1
-
-	beq t1, t0, increment_neighbour_count
-
-	
+	bne v0, zero, increment_neighbour_count	
+	br increment_loop_offset 
 		
 	increment_neighbour_count:
-		addi v0, v0, 1 		
+	addi s5, s5, 1 		;stores the number of neighbour count
+	br increment_loop_offset 
+
+	increment_loop_offset:
+	cmpeqi t5, s3, 1	;whether x offset is equal to 1
+	cmpeqi t6, s4, 1	;whether y offset is equal to 1
+	and t7, t5, t6
+	beq t7, t4, end_find_neigh	;if both x offset and y offset are 1 end loop
+	cmplti t7, s3, 1	;if x offset is less than 1
+	add s3, s3, t7		; add 1 if x offset is less than 1
+	beq t7, t4, initialise_parameter ; if x offset is less than 1 redo the loop
+	addi s3, zero, -1	;else reinitialise x offset at -1
+	addi s4, zero, 1	;add 1 to y offset
+	br initialise_parameter
+
+	set_return_param_1:
+	add a0, s0, zero
+	add a1, s1, zero
+	call get_pixel
+	add v1, zero, v0
+	br increment_loop_offset
 
 	end_find_neigh:
-	;POP
+	add v0, zero, s5
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
@@ -725,12 +773,15 @@ set_7Seg:	;Given the amount of steps to be displayed on the 7seg displays, finds
 	
 get_pixel: 	;given coords (x,y) (in (a0, a1)) returns the state of the cell in v0
 	;a0 is x axis, a1 is y axis
+
 	srli t0, a0, 2	;divides x axis by 4
 	ldw t1, LEDS(t0);load the corresponding led array
 	andi t0, a0, 3	;x modulo 4
 	slli t0, t0, 3	;(x%4) * 8
 	add t0, t0, a1	;add y input to get the index of the pixel in the array
-	and t0, t0, t1	;isolate the bit at the given index in the array
+	addi t2, zero, 1
+	sll t2, t2, t0
+	and t0, t2, t1	;isolate the bit at the given index in the array
 	cmpne v0, t0, zero	;if isolated bit isn't zero then it's alive hence v0 is 1
 	ret
 
