@@ -29,93 +29,26 @@
     .equ RUNNING, 0x01
 
 main:
-
-
-	; Initialization of value // DONT DELETE OR WONT WORK
-	stw zero, GSA_ID(zero)	;Set GSA ID to 0 
+	; Initialization of stack // DONT DELETE OR WONT WORK
 	addi sp, zero, 8192		;Init stack pointer to end of memory (0x2000)
 
 	loop1:
-	call reset_game
-	call draw_gsa
-
-	addi a1, zero, 6
-	addi a0, zero, 2
-	call get_pixel 
-
-	break
-	call get_input		;sets v0 to edgecapturesele
-	add v1, zero, zero
+	call reset_game		;resets the game
+	call get_input		;sets v0 to edgecapture
 	loop2:
-	add a0, zero, v0
+	add a0, zero, v0	;a0 is edgecapture input of select_action
 	call select_action	;did not change value of v0
-	add a0, zero, v0
+	add a0, zero, v0	;a0 is edgecapture input of update_state
 	call update_state
-	call update_gsa
-	call draw_gsa
-	call wait
-	call decrement_step
-	add v1, zero, v0
-	call get_input
-	beq v1, zero, loop2
-	br loop1
-
-	;addi t0, zero, 1		;init value for speed
-	;stw t0, SPEED(zero)		; load init value in speed register
-	;stw t0, CURR_STEP(zero)	; default value currstep
-	;stw t0, CURR_STEP(zero)	;put the value of the 7seg to init value
-	;call set_7Seg			;initialize 7seg to init value
-	;call reset_gsa
-	;call draw_gsa
-	;addi a0, zero, 0
-	;addi a1, zero, 0
-	;call get_pixel
-	;Testing random_gsa:	
-	;call random_gsa
-	;call draw_gsa
-	;break
-
-	;Testing change_speed:
-	;addi a0, a0, 0
-	;call change_speed
-	;break
-
-	;Testing pause_game:
-	;call pause_game 
-	;call pause_game 
-	;break
-
-	;Testing change steps:
-	;addi a0, zero, 1
-	;addi a1, zero, 1
-	;addi a2, zero, 1
-	;call change_steps
-	;addi a0, zero, 1
-	;addi a1, zero, 0
-	;addi a2, zero, 0
-	;call change_steps
-	;call set_7Seg
-	;break	
-
-	;Testing decrement_step
-	;addi t0, zero, 2
-	;stw t0, CURR_STATE(zero)
-	;call decrement_step
-	;call decrement_step
-	;break;
-
-	;Testing set 7seg
-	;addi t0, zero, 0xEAD
-	;stw t0, CURR_STEP(zero)
-	;call set_7Seg
-	;break
-
-	;Testing increment_seed:
-	;call increment_seed
-	;call draw_gsa
-	;break
-
-	;;TODO
+	call update_gsa		;doesn't take input
+	call mask			;doesn't take input
+	call draw_gsa		;doesn't take input
+	call wait			;doesn't take input
+	call decrement_step	;v0 takes value 1 if finished else 0
+	add v1, zero, v0	;puts v0 into v1 to preserve it's value since get_input will temper with v0
+	call get_input		;v0 takes value of edge capture
+	beq v1, zero, loop2	;if v1=0, game isn't finished hence we go again in loop2
+	br loop1			;else end game en go back to loop1
 
 ; BEGIN:clear_leds
 clear_leds:
@@ -147,7 +80,7 @@ set_pixel:
 ; BEGIN:wait
 wait:
 	addi t0, zero, 1
-	slli t0, t0, 3 ;19
+	slli t0, t0, 19
 	ldw t2, SPEED(zero)
 	decrement_timer_loop:
 	sub t0, t0, t2
@@ -237,7 +170,6 @@ random_gsa:
 	addi sp, sp, -4
 	stw ra, 0(sp)
 
-	addi s1, zero, 8	;Max value of y coordinate (used for comparisons later)
 	add a0, zero, zero
 	add a1, zero, zero
 
@@ -245,7 +177,8 @@ random_gsa:
 	ldw a0, RANDOM_NUM(zero)
 	call set_gsa
 	addi a1, a1, 1
-	blt a1, s1, randomize_gsa
+	addi t0, zero, 8
+	blt a1, t0	, randomize_gsa
 	br end_random_gsa
 
 	end_random_gsa:
@@ -355,6 +288,8 @@ select_action:
 	call increment_seed
 	br end_select
 	initB1:				;actions of b1
+	addi t0, zero, 1
+	stw t0, PAUSE(zero)
 	br end_select
 	initB234:			;actions of b2
 	andi t0, a0, 4
@@ -501,10 +436,12 @@ increment_seed:
 	ldw t0, CURR_STATE(zero)
 	beq t0, zero, increment_seed_init
 	beq t0, t1, increment_seed_rand
-	br end
+	br end_incr
 
 	increment_seed_init:
 	ldw t0, SEED(zero)
+	addi t1, zero, N_SEEDS - 1
+	beq t0, t1, incr_init_w_overflow	;if seed if already the max one we have an overflow
 	addi t0, t0, 1
 	stw t0, SEED(zero)
 	addi a0 ,zero, 0	; line value
@@ -521,17 +458,25 @@ increment_seed:
 	addi s1, s1, 4		; increment line
 	addi a1, a1, 1		; increment y coordinate
 	blt a1, s2, increment_loop
-	br end
+	br end_incr
+
+	incr_init_w_overflow:	;when pushed b0 one to many time
+	addi t0, t0, 1	;go to seeds n+1 
+	slli t0, t0, 2		;multiply n+1 by 4 (difference btwn addresses is 4)
+	ldw t0, MASKS(t0)	;get address of mask n+1	
+	stw t0, MASK(zero)	;store the address in the current seed address
+
+	call random_gsa		;apply a random gsa
+	br end_incr
 
 	increment_seed_rand:
 	addi t0, zero, N_SEEDS
 	slli t0, t0, 4
 	ldw t0, MASKS+N_SEEDS(zero) ; load
 	stw t0, MASK(zero)
-	call random_gsa
-	br end
+	br end_incr
 
-	end:
+	end_incr:
 	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
@@ -569,72 +514,67 @@ find_neighbours:
 	addi sp, sp, -4
 	stw ra, 0(sp)
 
+
+	addi sp, sp, -20	;prepares to push 5 values
+	stw s0, 0(sp)		;push s0
+	stw s1, 4(sp)		;push s1
+	stw s3, 8(sp)		;push s3
+	stw s4, 12(sp)		;push s4
+	stw s5, 16(sp)		;push s5
+
+
 	add s0, a0, zero
 	add s1, a1, zero
+	addi s4, zero, -2	; offset in y direction
+	add s5, zero, zero	; number of neighbours
 
+	loop_y_increment:
 	addi s3, zero, -1	; offset in x direction
-	addi s4, zero, -1	; offset in y direction
-	add s5, zero, zero ; number of neighbours
+	addi s4, s4, 1
 	
-	initialise_parameter:
-	addi t2, zero, 7	; mask for mod 8
-	addi t3, zero, 12
-	addi t4, zero, 1
-
-	cmpeqi t5, s3, 0	;whether x offset is equal to 0
-	cmpeqi t6, s4, 0	;whether y offset is equal to 0
-	and t7, t5, t6
-	bne t7, zero, set_return_param_1 ;if both offset are equal to 0 skip cell
-	
-	add a0, s0, s3		; x value to be selected without mod applied
-	add a1, s1, s4 		; y value to be selected without mod applied
-	and a1, a1, t2 		; y mod 8
-
-	blt a0, zero, negative_a
-	beq a0, t3, zero_a
-	br get_pixel_loop
-	
-	negative_a:
-	addi a0, zero, 11
-	br get_pixel_loop
-
-	zero_a:
-	add a0, zero, zero
-	br get_pixel_loop
-	
-	get_pixel_loop:
-	call get_pixel
-	bne v0, zero, increment_neighbour_count	
-	br increment_loop_offset 
+	addi t0, zero, 2	; max value of y
+	blt s4, t0, loop_x_increment
+	br end_find_neigh
 		
-	increment_neighbour_count:
-	addi s5, s5, 1 		;stores the number of neighbour count
-	br increment_loop_offset 
+	loop_x_increment:
+	add a0, s0, s3		;add offset to x
+	add a1, s1, s4		;add offset to y							;* * *
+	andi a1, a1, 7		;a1 mod 8									;* * *
+	call mod12			;set a0 to x mod 12							;* * *
+	call get_pixel_gsa		;v0 has value of cell at (x,y)				
+	add s5, s5, v0		;add neigh value to total 
 
-	increment_loop_offset:
-	cmpeqi t5, s3, 1	;whether x offset is equal to 1
-	cmpeqi t6, s4, 1	;whether y offset is equal to 1
-	and t7, t5, t6
-	beq t7, t4, end_find_neigh	;if both x offset and y offset are 1 end loop
-	cmplti t7, s3, 1	;if x offset is less than 1
-	add s3, s3, t7		; add 1 if x offset is less than 1
-	beq t7, t4, initialise_parameter ; if x offset is less than 1 redo the loop
-	addi s3, zero, -1	;else reinitialise x offset at -1
-	addi s4, zero, 1	;add 1 to y offset
-	br initialise_parameter
-
-	set_return_param_1:
-	add a0, s0, zero
-	add a1, s1, zero
-	call get_pixel
-	add v1, zero, v0
-	br increment_loop_offset
+	addi s3, s3, 1		;increment offset
+	addi t0, zero, 2	;max value of x offset
+	blt s3, t0, loop_x_increment
+	br loop_y_increment
 
 	end_find_neigh:
-	add v0, zero, s5
-	ldw ra, 0(sp)
-	addi sp, sp, 4
+	add a0, zero, s0	;restore original x 
+	add a1, zero, s1	;restore original y
+	call get_pixel_gsa		;v0 holds pixel value
+	add v1, zero ,v0	;set return value
+	sub s5, s5, v0		;substract self value to neighbors count
+	add v0, zero, s5	;neigh count in return register v0
+	;POP
+	ldw s0, 0(sp)
+	ldw s1, 4(sp)
+	ldw s3,	8(sp)
+	ldw s4, 12(sp)
+	ldw s5, 16(sp)
+	ldw ra, 20(sp)
+	addi sp, sp, 24
 	ret
+
+	mod12:
+	mod12_loop:
+	blt a0, zero, retMod12
+	addi a0, a0, -12
+	br mod12
+	retMod12:
+	addi a0, a0, 12
+	ret
+	
 
 ; END:find_neighbours
 
@@ -645,7 +585,7 @@ update_gsa:
 	stw ra, 0(sp)
 
 	ldw t0, PAUSE(zero)
-	beq t0, zero, end_update_gsa
+	beq t0, zero, end_update_gsa_noReversing
 	
 	add s5, zero, zero	; x axis
 	add s6, zero, zero	; y axis
@@ -662,9 +602,11 @@ update_gsa:
 	slli v0, v0, 12
 	add s7, s7, v0		;adds the new value of the cell to the gsa row
 	srli s7, s7, 1		
-	
+
+	addi s5, s5, 1		;increment x	
 	addi t0, zero, 12	;t0 holds max val of x
 	beq s5, t0,  changeLine
+	br updater_loop
 
 	changeLine:
 	ldw t0, GSA_ID(zero)
@@ -685,6 +627,10 @@ update_gsa:
 	br updater_loop
 	
 	end_update_gsa:
+	ldw t0, GSA_ID(zero)
+	xori t0, t0, 1	;invert GSA_ID
+	stw t0, GSA_ID(zero)
+	end_update_gsa_noReversing:
 	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
@@ -698,8 +644,7 @@ mask:
 	stw ra, 0(sp)
 
 	add a0, zero, zero	;y coord
-	ldw t0, MASK(zero)	;gets mask index
-	ldw s0, MASKS(t0)	;get corresponding mask starting address
+	ldw s0, MASK(zero)	;get corresponding mask starting address
 	loop_mask:
 	call get_gsa		;v0 now contains current gsa row
 	ldw t1, 0(s0)		;gets mask for the current line
@@ -709,6 +654,7 @@ mask:
 	call set_gsa		;puts the masked gsa back in place
 	addi a0, a1, 1		;increments line and puts it back into a0
 	addi t0, zero, 8	;max y value
+	addi s0, s0, 4		;increment mask line address
 	blt a0, t0, loop_mask
 
 	;POP
@@ -737,19 +683,21 @@ decrement_step:
 	beq t0, t1, RunStateDecrement	
 	
 	InitRandDecrement:
-	call set_7Seg
 	add v0, zero, zero
 	br end_decrement_step
 
 	RunStateDecrement:
+	addi v0, zero, 0
+	ldw t1, PAUSE(zero)
+	beq t1, zero, end_decrement_step	
 	ldw t1, CURR_STEP(zero)	;get the amount of step remaining
 	cmpeq v0, t1, zero		;if steps remaining=0 set v0 to 1
 	beq t1, zero, end_decrement_step	;if steps remaining was 0 go to the end
 	addi t1, t1, -1			;decrement steps
 	stw t1, CURR_STEP(zero)	;update remaining steps value
-	call set_7Seg
 
 	end_decrement_step:
+	call set_7Seg
 	;POP
 	ldw ra, 0(sp)
 	addi sp, sp, 4
@@ -767,6 +715,8 @@ reset_game:
 	call set_7Seg			;display current amount of steps
 
 	stw zero, SEED(zero)	;set seed to 0
+	ldw t0, MASKS(zero)		;set to use mask0
+	stw t0, MASK(zero)		;store mask0 in mask register
 
 	stw zero, GSA_ID(zero)	;set GSA_ID to 0
 	call reset_gsa			;set gsa0 to seed0
@@ -783,7 +733,7 @@ reset_game:
 ; END:reset_game
 
 ; BEGIN:helper
-.equ MASK, 0x1200 
+.equ MASK, 0x1200	;holds the address of the current mask
 
 reset_gsa:
 	;PUSH 
@@ -826,20 +776,27 @@ set_7Seg:	;Given the amount of steps to be displayed on the 7seg displays, finds
 	end_set_7seg:
 	ret
 	
-get_pixel: 	;given coords (x,y) (in (a0, a1)) returns the state of the cell in v0
-	;a0 is x axis, a1 is y axis
+get_pixel_gsa: 	;given coords (x,y) (in (a0, a1)) returns the state of the cell from gsa in v0
+	;PUSH
+	addi sp, sp, -4
+	stw ra, 0(sp)
 
-	srli t0, a0, 2	;divides x axis by 4
-	ldw t1, LEDS(t0);load the corresponding led array
-	andi t0, a0, 3	;x modulo 4
-	slli t0, t0, 3	;(x%4) * 8
-	add t0, t0, a1	;add y input to get the index of the pixel in the array
-	addi t2, zero, 1
-	sll t2, t2, t0
-	and t0, t2, t1	;isolate the bit at the given index in the array
-	cmpne v0, t0, zero	;if isolated bit isn't zero then it's alive hence v0 is 1
+	add t0, zero, a0
+	add a0, zero, a1	;puts a1 in a0
+	add a1, zero, t0	;puts a0 in a1 (from t0 which is where we has stored the original value of a0)
+
+	call get_gsa		;gets the current line
+
+	addi t0, zero, 1
+	sll t0, t0, a1		;shift the one to the index in the line given by x
+	
+	and t0, v0, t0		;isolate bit at position x in row 
+	cmpnei v0, t0, 0	;if isolated bit isn't equal to zero, set t0 to 1
+
+	;POP
+	ldw ra, 0(sp)
+	addi sp, sp, 4
 	ret
-
 ; END:helper
 
 
