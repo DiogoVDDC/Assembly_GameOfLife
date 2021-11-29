@@ -25,3 +25,19 @@ The led array in the gecko is indexed in the following way:
 
 ![alt text](https://github.com/DiogoVDDC/Assembly_GameOfLife/blob/main/led_array_indexing.png)
 
+And the RAM memory is layed out in the following way: 
+
+![alt text](https://github.com/DiogoVDDC/Assembly_GameOfLife/blob/main/RAM_memory_organization.png)
+
+### Implementation of drawing related procedures:
+
+The led array is called a game state array (GSA), we use two function get_gsa and set_gsa to create the procedure draw_gsa which draws all the cells onto the leds.
+
+### Implementation of update related procedures:
+
+To update the GSA we use update_gsa procedure however to implement this procedure we have to determine for each cell it's fate either dead or alive.
+
+To determine the cell fate we use the cell_fate procedure which uses the find_neighbours procedure.
+
+The find_neighbours is implemented such that even cells on the border of the leds have their neighbours.
+
