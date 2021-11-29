@@ -2,7 +2,7 @@
 
 Programmed the game of life on Gecko FPGA (see board):
 
-![alt text](https://github.com/DiogoVDDC/Assembly_GameOfLife/blob/main/image_2021-11-29_211539.png)
+![alt text](https://github.com/DiogoVDDC/Assembly_GameOfLife/blob/main/image_2021-11-29_211539.png){:height="50%" width="50%"}
 
 
 Button Mapping:
