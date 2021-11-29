@@ -134,16 +134,16 @@ draw_gsa:
 
 	andi t3, v0, 1		;isolate last bit of v0 // isolated bit is already in LSB
 	sll t3, t3, t5		;shift to get bit in the rigt column and row
-	or s0, s0, t3		;Put in leds 0											t4
-;																				11109 8 7 6 5 4 3 2 1 0			LEDS 0		LEDS 1		LEDS 2
-	andi t3, v0, 16		;isolate bit at index 4 of v0					   a0 0 | | | | | | | | | | | |			0 8  16 24 | 0 8  16 24 | 0 8  16 24 
-	srli t3, t3, 4		;isolated bit in LSB								  1	| | | | | | | | | | | | 		1 9  17 25 | 1 9  17 25 | 1 9  17 25 
-	sll t3, t3, t5		;shift to get bit in the rigt column and row		  2	| | | | | | | | | | | | 		2 10 18 26 | 2 10 18 26 | 2 10 18 26 
-	or s1, s1, t3		;Put in leds 1										  3	| | | | | | | | | | | | 		3 11 19 27 | 3 11 19 27 | 3 11 19 27 
-;																			  4	| | | | | | | | | | | | 		4 12 20 28 | 4 12 20 28 | 4 12 20 28 
-	andi t3, v0, 256	;isolate bit at index 8 of v0						  5	| | | | | | | | | | | | 		5 13 21 29 | 5 13 21 29 | 5 13 21 29 
-	srli t3, t3, 8		;isolated bit in LSB								  6	| | | | | | | | | | | | 		6 14 22 30 | 6 14 22 30 | 6 14 22 30 
-	sll t3, t3, t5		;shift to get bit in the rigt column and row		  7	| | | | | | | | | | | | 		7 15 23 31 | 7 15 23 31 | 7 15 23 31 
+	or s0, s0, t3		;Put in leds 0											
+;																				
+	andi t3, v0, 16		;isolate bit at index 4 of v0					  
+	srli t3, t3, 4		;isolated bit in LSB							
+	sll t3, t3, t5		;shift to get bit in the rigt column and row		 
+	or s1, s1, t3		;Put in leds 1										
+;																			
+	andi t3, v0, 256	;isolate bit at index 8 of v0					
+	srli t3, t3, 8		;isolated bit in LSB								 
+	sll t3, t3, t5		;shift to get bit in the rigt column and row		  
 	or s2, s2, t3		;Put in leds 2
 	
 	cmpeqi t6, s4, 24	;if t4==24 then t6 = 6 hence changing the line 
