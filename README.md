@@ -33,6 +33,8 @@ And the RAM memory is layed out in the following way:
 
 The led array is called a game state array (GSA), we use two function get_gsa and set_gsa to create the procedure draw_gsa which draws all the cells onto the leds.
 
+To draw on the leds we have to change the values of address LEDS in the RAM. We change the value corresponding to what is in the GSA.
+
 ### Implementation of update procedures:
 
 To update the GSA we use update_gsa procedure however to implement this procedure we have to determine for each cell it's fate either dead or alive.
